@@ -6,4 +6,4 @@ __queuestorage__
 local.settings.json
 test
 .venv
-TimerTriggerEveryDay/.env
+UpdatePlaylist/.env
