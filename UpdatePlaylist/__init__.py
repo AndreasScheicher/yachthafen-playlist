@@ -17,7 +17,7 @@ def main(mytimer: func.TimerRequest) -> None:
     logging.info('Python timer trigger function ran at %s', utc_timestamp)
 
     # load .env if running locally
-    if os.getenv('WEBSITE_SITE_NAME')  != "YachthafenSpotifyPlaylist":
+    if os.getenv('WEBSITE_SITE_NAME')  != "YachthafenPlaylistUpdate":
         logging.info('developing locally')
         load_dotenv()
 
