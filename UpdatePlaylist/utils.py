@@ -90,32 +90,39 @@ def get_current_playlist(access_token, playlist_id='7jNg10gzkESHZ0SiX8FtlG'):
     """
     offset = 0
     limit = 100
-    total = 1
+    max_requests = 1000
+    requests_counter = 0
 
     playlist_tracks = []
 
-    while total > offset:
+    url = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks?offset={offset}&limit={limit}"
 
-        url = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks?limit={limit}&offset={offset}"
+    payload = {}
+    headers = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {access_token}'
+    }
 
-        payload = {}
-        headers = {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {access_token}'
-        }
+    while url and requests_counter < max_requests:
 
         response = requests.request(
             "GET", url, headers=headers, data=payload, timeout=10)
+        
+        if response.status_code == 200:
 
-        total = response.json()['total']
-        offset += limit
+            data = response.json()
 
-        for item in response.json()['items']:
-            playlist_tracks.append(item['track']['id'])
+            for item in data.get('items'):
+                playlist_tracks.append(item['track']['id'])
 
-    if len(playlist_tracks) == total:
-        logging.info('got current spotify playlist')
+            url = data.get('next')
+
+        else:
+            url = None
+            break
+
+        time.sleep(1)
 
     return playlist_tracks
 
