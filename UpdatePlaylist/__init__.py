@@ -34,11 +34,11 @@ def main(mytimer: func.TimerRequest) -> None:
     # get all new tracks from website
     radio_tracks = utils.get_superfly_playlist()
     # get spotify ids of radio tracks
-    track_ids = utils.get_new_track_ids(radio_tracks, access_token=access_token)
+    track_ids, track_names = utils.get_new_track_ids(radio_tracks, access_token=access_token)
     # get spotify ids of current spotify playlist
-    playlist_tracks = utils.get_current_playlist(access_token=access_token)
+    playlist_tracks_ids, playlist_tracks_names = utils.get_current_playlist(access_token=access_token)
     # filter all tracks that are already in playlist
-    tracks_to_add = [track for track in track_ids if track not in playlist_tracks]
+    tracks_to_add = utils.filter_existing_tracks(track_ids, track_names, playlist_tracks_ids, playlist_tracks_names)
     # add new tracks to playlist if there are any
     if len(tracks_to_add):
         utils.add_tracks_to_playlist(tracks_to_add, access_token=access_token)

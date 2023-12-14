@@ -93,7 +93,8 @@ def get_current_playlist(access_token, playlist_id='7jNg10gzkESHZ0SiX8FtlG'):
     max_requests = 1000
     requests_counter = 0
 
-    playlist_tracks = []
+    playlist_tracks_ids = []
+    playlist_tracks_names = []
 
     url = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks?offset={offset}&limit={limit}"
 
@@ -108,13 +109,15 @@ def get_current_playlist(access_token, playlist_id='7jNg10gzkESHZ0SiX8FtlG'):
 
         response = requests.request(
             "GET", url, headers=headers, data=payload, timeout=10)
-        
+
         if response.status_code == 200:
 
             data = response.json()
 
             for item in data.get('items'):
-                playlist_tracks.append(item['track']['id'])
+                track = item.get('track')
+                playlist_tracks_ids.append(track.get('id'))
+                playlist_tracks_names.append((track.get('artists')[0].get('name').lower(), track.get('name').lower()))
 
             url = data.get('next')
 
@@ -124,7 +127,7 @@ def get_current_playlist(access_token, playlist_id='7jNg10gzkESHZ0SiX8FtlG'):
 
         time.sleep(1)
 
-    return playlist_tracks
+    return playlist_tracks_ids, playlist_tracks_names
 
 
 def get_spotify_search_response(artist, track, access_token):
@@ -134,7 +137,7 @@ def get_spotify_search_response(artist, track, access_token):
     url_base = "https://api.spotify.com/v1/search?q="
     # format the url containing the track info
     quoted_space = parse.quote(' ')
-    query_unquoted = f"remaster{quoted_space}track:{track}{quoted_space}artist:{artist}"
+    query_unquoted = f"remaster{quoted_space}track:{track.title()}{quoted_space}artist:{artist.title()}"
     query = parse.quote(query_unquoted)
     end = "&type=track&limit=10"
 
@@ -157,10 +160,13 @@ def get_matching_id_from_search(response, artist, track):
     Returns id of the first track where artist and track match at least 80%.
     """
     for item in response['tracks']['items']:
+        spotify_name = item['name'].lower()
         for item_artist in item['artists']:
-            if (SequenceMatcher(None, a=item_artist['name'].lower(), b=artist).ratio() >= 0.8 and
-                    SequenceMatcher(None, a=item['name'].lower(), b=track).ratio() >= 0.8):
-                return item['id']
+            spotify_artist = item_artist['name'].lower()
+            if (SequenceMatcher(None, a=spotify_artist, b=artist).ratio() >= 0.8 and
+                    SequenceMatcher(None, a=spotify_name, b=track).ratio() >= 0.8):
+                return item['id'], spotify_artist, spotify_name
+    return None, None, None
 
 
 def get_new_track_ids(radio_tracks, access_token):
@@ -168,6 +174,7 @@ def get_new_track_ids(radio_tracks, access_token):
     Takes Superfly playlist and returns the Spotify matches.
     """
     track_ids = []
+    track_names = []
 
     for radio_track in radio_tracks:
         # extract artist and track from format "artist - track"
@@ -181,14 +188,27 @@ def get_new_track_ids(radio_tracks, access_token):
                 artist, song, access_token=access_token)
 
             # get first matching item of search result list
-            track_id = get_matching_id_from_search(response, artist, song)
+            track_id, spotify_artist, spotify_name = get_matching_id_from_search(response, artist, song)
             if track_id is not None:
                 track_ids.append(track_id)
+                track_names.append((spotify_artist, spotify_name))
 
             # wait 1 second between api calls
             time.sleep(1)
 
-    return track_ids
+    return track_ids, track_names
+
+
+def filter_existing_tracks(track_ids, track_names, playlist_tracks_ids, playlist_tracks_names):
+    tracks_to_add = []
+    for track_id, track_name in zip(track_ids, track_names):
+        if track_id in playlist_tracks_ids:
+            continue
+        elif track_name in playlist_tracks_names:
+            continue
+        else:
+            tracks_to_add.append(track_id)
+    return tracks_to_add
 
 
 def add_tracks_to_playlist(tracks_to_add, access_token, playlist_id='7jNg10gzkESHZ0SiX8FtlG'):
