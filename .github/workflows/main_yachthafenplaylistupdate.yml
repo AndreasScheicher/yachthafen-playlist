@@ -42,6 +42,14 @@ jobs:
           print("Smoke OK")
           PY
 
+      - name: Run unit tests
+        run: |
+          if [ -d tests ]; then
+            python -m unittest -q
+          else
+            echo "No tests directory; skipping."
+          fi
+
   build:
     runs-on: ubuntu-latest
     needs: [test]
