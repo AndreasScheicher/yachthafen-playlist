@@ -10,30 +10,16 @@ import base64
 from urllib import parse
 from difflib import SequenceMatcher
 import requests
-
-from bs4 import BeautifulSoup
+ 
+from .superfly import get_superfly_playlist as fetch_superfly_playlist
 
 
 def get_superfly_playlist():
     """
-    Get current Superfly Yachthafen Playlist
+    Get current Superfly Yachthafen Playlist.
+    Delegates to UpdatePlaylist.superfly for fetching and parsing.
     """
-    superfly_url = "https://superfly.fm/shows/superfly-yachthafen"
-    # get page content
-    response = requests.request("GET", superfly_url, timeout=10)
-    assert response.status_code == 200, "Playlist Request Error"
-
-    # parse page content
-    soup = BeautifulSoup(response.content, 'html.parser')
-
-    # extract and clean tracks
-    items = soup.find(class_="itemFullText").find_all('li')
-    radio_tracks = [item.text.strip('\n').lower().replace(
-        "`", "'").replace("–", "-") for item in items]
-
-    if len(radio_tracks):
-        logging.info('accessed superfly playlist')
-    return radio_tracks
+    return fetch_superfly_playlist()
 
 
 # def get_spotify_token(client_id, client_secret):
