@@ -11,9 +11,11 @@ SUPERFLY_URL = "https://superfly.fm/shows/superfly-yachthafen"
 def parse_superfly_html(html: bytes) -> List[str]:
     """Parse Superfly Yachthafen HTML and return ["artist - title", ...] in lowercase.
 
-    Supports two patterns observed on the site:
+    Supports three patterns observed on the site:
     1) Card layout: elements with classes .team-member containing .song-title and .artist
-    2) Text lines: alternating lines of "Title" then "– Artist"
+    2) Grid layout: unclassed card <div>s after the "Playlist – Show vom" heading,
+       each holding a <p>Title</p> followed by a <p>– Artist</p>
+    3) Text lines: alternating lines of "Title" then "– Artist"
     """
     soup = BeautifulSoup(html, "html.parser")
 
@@ -43,14 +45,39 @@ def parse_superfly_html(html: bytes) -> List[str]:
             artist_raw = artist_el.get_text(" ", strip=True)
             artist = _normalize_punct(artist_raw.lstrip("–—-").strip())
 
-        pair = f"{artist} - {title}".strip().lower()
+        pair = f"{_first_artist(artist)} - {title}".strip().lower()
         if _looks_like_pair(pair):
             results.append(pair)
 
     if results:
         return results
 
-    # 2) Fallback to text-line pairing
+    # 2) Grid of unclassed cards following the playlist heading
+    heading = next(
+        (
+            h for h in soup.find_all(["h1", "h2", "h3", "h4"])
+            if "playlist" in h.get_text().lower() and "show vom" in h.get_text().lower()
+        ),
+        None,
+    )
+    grid = heading.find_next_sibling("div") if heading else None
+    if grid:
+        for card in grid.find_all("div", recursive=False):
+            paragraphs = [p.get_text(" ", strip=True) for p in card.find_all("p")]
+            paragraphs = [p for p in paragraphs if p]
+            if len(paragraphs) < 2 or not paragraphs[1].startswith(("–", "—", "-")):
+                continue
+            title = _normalize_punct(paragraphs[0])
+            artist = _normalize_punct(paragraphs[1].lstrip("–—-").strip())
+
+            pair = f"{_first_artist(artist)} - {title}".strip().lower()
+            if _looks_like_pair(pair):
+                results.append(pair)
+
+    if results:
+        return results
+
+    # 3) Fallback to text-line pairing
     lines = [s.strip() for s in soup.stripped_strings if s and s.strip()]
 
     # Find the anchor heading for the playlist section
@@ -92,7 +119,7 @@ def parse_superfly_html(html: bytes) -> List[str]:
             title = _normalize_punct(title)
             artist = _normalize_punct(artist)
 
-            pair = f"{artist} - {title}".strip().lower()
+            pair = f"{_first_artist(artist)} - {title}".strip().lower()
             if _looks_like_pair(pair):
                 results.append(pair)
             i += 2
@@ -136,6 +163,12 @@ def _normalize_punct(s: str) -> str:
         .replace("`", "'")
         .strip()
     )
+
+
+def _first_artist(artist: str) -> str:
+    # Multiple artists are listed as "A; B; C". Spotify matching compares
+    # against one artist at a time, so keep only the primary one.
+    return artist.split(";", 1)[0].strip()
 
 
 def _looks_like_pair(s: str) -> bool:

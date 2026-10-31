@@ -164,7 +164,8 @@ def get_new_track_ids(radio_tracks, access_token):
 
     for radio_track in radio_tracks:
         # extract artist and track from format "artist - track"
-        splitted = radio_track.split('-')
+        # split only on the first " - " so hyphenated names stay intact
+        splitted = radio_track.split(' - ', 1)
         if len(splitted) == 2:
             artist = splitted[0].strip()
             song = splitted[1].strip()

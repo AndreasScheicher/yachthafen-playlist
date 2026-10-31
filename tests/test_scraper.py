@@ -6,6 +6,7 @@ from UpdatePlaylist.superfly import parse_superfly_html
 
 FIXTURE = Path(__file__).parent / "fixtures" / "superfly_playlist_basic.html"
 FIXTURE_TEXT = Path(__file__).parent / "fixtures" / "superfly_playlist_textlines.html"
+FIXTURE_GRID = Path(__file__).parent / "fixtures" / "superfly_playlist_grid.html"
 
 
 class TestSuperflyParser(unittest.TestCase):
@@ -34,6 +35,20 @@ class TestSuperflyParser(unittest.TestCase):
                 "flo naegeli & august charles - changes",
                 "george duke - reach out",
                 "fred kingdom - close that door",
+            ],
+        )
+
+    def test_parses_grid_fixture(self):
+        html = FIXTURE_GRID.read_bytes()
+        tracks = parse_superfly_html(html)
+        self.assertIsInstance(tracks, list)
+        # Multiple artists separated by ";" are reduced to the first one
+        self.assertEqual(
+            tracks,
+            [
+                "phoenix - too young",
+                "free nationals - beauty & essex",
+                "bruno mars - after last night",
             ],
         )
 
