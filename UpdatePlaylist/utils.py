@@ -22,19 +22,6 @@ def get_superfly_playlist():
     return fetch_superfly_playlist()
 
 
-# def get_spotify_token(client_id, client_secret):
-#    url = "https://accounts.spotify.com/api/token"
-
-#    payload = f'grant_type=client_credentials&client_id={client_id}&client_secret={client_secret}'
-#    headers = {
-#    'Content-Type': 'application/x-www-form-urlencoded'
-#    }
-
-#    response = requests.request("POST", url, headers=headers, data=payload)
-
-#    return response
-
-
 def encode_credentials(client_id, client_secret):
     """
     Encode client id and client secret Base 64.
@@ -64,9 +51,11 @@ def refresh_spotify_access_token(client_id, client_secret, refresh_token):
     response = requests.request(
         "POST", url, headers=headers, data=payload, timeout=10)
 
-    if response.status_code == 200:
-        logging.info('refreshed access_token')
+    if response.status_code != 200:
+        raise RuntimeError(
+            f'failed to refresh spotify access_token: {response.status_code} {response.text}')
 
+    logging.info('refreshed access_token')
     return response.json()['access_token']
 
 
@@ -102,6 +91,9 @@ def get_current_playlist(access_token, playlist_id='7jNg10gzkESHZ0SiX8FtlG'):
 
             for item in data.get('items'):
                 track = item.get('track')
+                # removed or unavailable tracks are returned as null
+                if not track or not track.get('artists'):
+                    continue
                 playlist_tracks_ids.append(track.get('id'))
                 playlist_tracks_names.append((track.get('artists')[0].get('name').lower(), track.get('name').lower()))
 
