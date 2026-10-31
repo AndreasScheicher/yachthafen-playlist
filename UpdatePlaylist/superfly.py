@@ -11,93 +11,40 @@ SUPERFLY_URL = "https://superfly.fm/shows/superfly-yachthafen"
 def parse_superfly_html(html: bytes) -> List[str]:
     """Parse Superfly Yachthafen HTML and return ["artist - title", ...] in lowercase.
 
-    Supports two patterns observed on the site:
-    1) Card layout: elements with classes .team-member containing .song-title and .artist
-    2) Text lines: alternating lines of "Title" then "– Artist"
+    The playlist is a grid of card <div>s following the "Playlist – Show vom" heading,
+    each holding a <p>Title</p> followed by a <p>– Artist</p>.
     """
     soup = BeautifulSoup(html, "html.parser")
 
     results: List[str] = []
 
-    # 1) Structured cards first
-    members = soup.select(".team-member")
-    for card in members:
-        title_el = card.select_one(".song-title")
-        # Artist can be in .artist or inside a <strong> within a .meta block prefixed by '- '
-        artist_el = (
-            card.select_one(".artist")
-            or card.select_one(".meta strong")
-            or card.select_one("strong")
-        )
-        if not title_el or not artist_el:
-            # As a fallback, try to derive from .meta text if present
-            meta_el = card.select_one(".meta")
-            if not title_el or not meta_el:
-                continue
-            title = _normalize_punct(title_el.get_text(" ", strip=True))
-            meta_text = meta_el.get_text(" ", strip=True)
-            # Strip leading dash/en-dash and whitespace
-            artist = _normalize_punct(meta_text.lstrip("–—-").strip())
-        else:
-            title = _normalize_punct(title_el.get_text(" ", strip=True))
-            artist_raw = artist_el.get_text(" ", strip=True)
-            artist = _normalize_punct(artist_raw.lstrip("–—-").strip())
-
-        pair = f"{artist} - {title}".strip().lower()
-        if _looks_like_pair(pair):
-            results.append(pair)
-
-    if results:
+    heading = next(
+        (
+            h for h in soup.find_all(["h1", "h2", "h3", "h4"])
+            if "playlist" in h.get_text().lower() and "show vom" in h.get_text().lower()
+        ),
+        None,
+    )
+    if heading is None:
+        logging.warning("Superfly parse: playlist heading not found")
         return results
 
-    # 2) Fallback to text-line pairing
-    lines = [s.strip() for s in soup.stripped_strings if s and s.strip()]
+    grid = heading.find_next_sibling("div")
+    if grid is None:
+        logging.warning("Superfly parse: playlist grid not found after heading")
+        return results
 
-    # Find the anchor heading for the playlist section
-    anchor_idx = None
-    for i, line in enumerate(lines):
-        low = line.lower()
-        if "playlist" in low and "show vom" in low:
-            anchor_idx = i
-            break
+    for card in grid.find_all("div", recursive=False):
+        paragraphs = [p.get_text(" ", strip=True) for p in card.find_all("p")]
+        paragraphs = [p for p in paragraphs if p]
+        if len(paragraphs) < 2 or not paragraphs[1].startswith(("–", "—", "-")):
+            continue
+        title = _normalize_punct(paragraphs[0])
+        artist = _normalize_punct(paragraphs[1].lstrip("–—-").strip())
 
-    if anchor_idx is None:
-        logging.warning("Superfly parse: playlist anchor not found")
-        start = 0
-    else:
-        start = anchor_idx + 1
-
-    def _strip_quotes(s: str) -> str:
-        s = s.strip()
-        # Normalize curly quotes and ASCII quotes
-        quotes = ('"', "'", "“", "”", "„", "‚", "’", "`")
-        while len(s) >= 2 and (s[0] in quotes and s[-1] in quotes):
-            s = s[1:-1].strip()
-        return s
-
-    i = start
-    while i < len(lines) - 1:
-        title_line = lines[i]
-        artist_line = lines[i + 1]
-
-        # Accept patterns like "Title" and – Artist / - Artist
-        is_title = title_line.startswith(("\"", "“", "„")) or title_line.endswith(("\"", "”"))
-        is_artist = artist_line.startswith("–") or artist_line.startswith("-")
-
-        if is_title and is_artist:
-            title = _strip_quotes(title_line)
-            artist = artist_line.lstrip("–-").strip()
-
-            # Normalize punctuation and whitespace
-            title = _normalize_punct(title)
-            artist = _normalize_punct(artist)
-
-            pair = f"{artist} - {title}".strip().lower()
-            if _looks_like_pair(pair):
-                results.append(pair)
-            i += 2
-        else:
-            i += 1
+        pair = f"{_first_artist(artist)} - {title}".strip().lower()
+        if _looks_like_pair(pair):
+            results.append(pair)
 
     return results
 
@@ -136,6 +83,12 @@ def _normalize_punct(s: str) -> str:
         .replace("`", "'")
         .strip()
     )
+
+
+def _first_artist(artist: str) -> str:
+    # Multiple artists are listed as "A; B; C". Spotify matching compares
+    # against one artist at a time, so keep only the primary one.
+    return artist.split(";", 1)[0].strip()
 
 
 def _looks_like_pair(s: str) -> bool:
